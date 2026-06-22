@@ -511,33 +511,154 @@ function renderOHLCStats(candles) {
 function renderOHLCChart(candles) {
   const card = document.getElementById('ohlc-chart-card');
   card.style.display = 'block';
-  const ctx = document.getElementById('ohlc-canvas').getContext('2d');
-  if (ohlcChart) ohlcChart.destroy();
 
-  const step = Math.max(1, Math.floor(candles.length / 200));
-  const s = candles.filter((_,i) => i%step===0);
-  const labels = s.map(c => new Date(c.time*1000).toISOString().substring(11,16));
-  const closes = s.map(c => parseFloat(c.close));
-  const vols = s.map(c => parseFloat(c.volume||0));
+  // Destroy old Chart.js instance if any
+  if (ohlcChart) { ohlcChart.destroy(); ohlcChart = null; }
 
-  ohlcChart = new Chart(ctx, {
-    data: {
-      labels,
-      datasets: [
-        { type:'line', label:'Close', data:closes, borderColor:'#2dca72', borderWidth:1.5, pointRadius:0, tension:0.1, yAxisID:'y', order:1 },
-        { type:'bar',  label:'Volume', data:vols, backgroundColor:'rgba(232,145,45,0.22)', yAxisID:'vol', order:2 }
-      ]
-    },
-    options: {
-      responsive:true, animation:false,
-      plugins:{ legend:{display:false}, tooltip:{ mode:'index', intersect:false, backgroundColor:'#141933', titleColor:'#7b5ef0', bodyColor:'#c8d0f0', borderColor:'#252d52', borderWidth:1 }},
-      scales:{
-        x:{ ticks:{color:'#4a5480', maxTicksLimit:12, font:{size:10}}, grid:{color:'rgba(37,45,82,.5)'}},
-        y:{ position:'left', ticks:{color:'#7d8ab5', font:{size:10}, callback:v=>v.toFixed(4)}, grid:{color:'rgba(37,45,82,.5)'}},
-        vol:{ position:'right', ticks:{color:'#4a5480', font:{size:10}}, grid:{drawOnChartArea:false}}
-      }
-    }
-  });
+  // Use raw canvas — draw OHLC bars manually
+  const canvas = document.getElementById('ohlc-canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 48;
+  const H = 280;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // Downsample if too many candles
+  const maxBars = Math.floor(W / 5);
+  const step = Math.max(1, Math.floor(candles.length / maxBars));
+  const s = candles.filter((_,i) => i % step === 0);
+
+  const padL = 72, padR = 16, padT = 16, padB = 36;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const highs = s.map(c => parseFloat(c.high));
+  const lows  = s.map(c => parseFloat(c.low));
+  const yMin  = Math.min(...lows)  * 0.9998;
+  const yMax  = Math.max(...highs) * 1.0002;
+  const yRange = yMax - yMin || 1;
+
+  const toY = v => padT + chartH - ((v - yMin) / yRange) * chartH;
+  const barW = Math.max(1, Math.floor(chartW / s.length) - 1);
+  const barX = i => padL + i * (chartW / s.length) + (chartW / s.length - barW) / 2;
+
+  // Background
+  ctx.fillStyle = '#0d1128';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines + Y labels
+  ctx.strokeStyle = 'rgba(37,45,82,0.6)';
+  ctx.fillStyle = '#7d8ab5';
+  ctx.font = '10px DM Mono, monospace';
+  ctx.textAlign = 'right';
+  const gridLines = 5;
+  for (let i = 0; i <= gridLines; i++) {
+    const v = yMin + (yRange * i / gridLines);
+    const y = toY(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(v.toFixed(2), padL - 6, y + 3);
+  }
+
+  // X labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4a5480';
+  const xStep = Math.max(1, Math.floor(s.length / 8));
+  for (let i = 0; i < s.length; i += xStep) {
+    const x = barX(i) + barW / 2;
+    const label = new Date(s[i].time * 1000).toISOString().substring(5, 16).replace('T', ' ');
+    ctx.fillText(label, x, H - padB + 14);
+  }
+
+  // OHLC bars
+  for (let i = 0; i < s.length; i++) {
+    const { open, high, low, close } = s[i];
+    const o = parseFloat(open), h = parseFloat(high), l = parseFloat(low), cl = parseFloat(close);
+    const bull = cl >= o;
+    const color = bull ? '#2dca72' : '#e8432d';
+    const x = barX(i);
+    const cx = x + barW / 2;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+
+    // High-low wick
+    ctx.beginPath();
+    ctx.moveTo(cx, toY(h));
+    ctx.lineTo(cx, toY(l));
+    ctx.stroke();
+
+    // Open tick (left)
+    ctx.beginPath();
+    ctx.moveTo(cx - barW / 2, toY(o));
+    ctx.lineTo(cx, toY(o));
+    ctx.stroke();
+
+    // Close tick (right)
+    ctx.beginPath();
+    ctx.moveTo(cx, toY(cl));
+    ctx.lineTo(cx + barW / 2, toY(cl));
+    ctx.stroke();
+  }
+
+  // Tooltip on hover
+  canvas._ohlcData = s;
+  canvas._ohlcLayout = { padL, padR, padT, padB, chartW, chartH, W, H, barX, barW, toY, yMin, yMax, yRange };
+  canvas.onmousemove = ohlcTooltip;
+  canvas.onmouseleave = () => {
+    const tip = document.getElementById('ohlc-tip');
+    if (tip) tip.style.display = 'none';
+  };
+}
+
+function ohlcTooltip(e) {
+  const canvas = e.currentTarget;
+  const s = canvas._ohlcData;
+  const { padL, chartW, barX, barW } = canvas._ohlcLayout;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+
+  // Find closest bar
+  let best = -1, bestDist = Infinity;
+  for (let i = 0; i < s.length; i++) {
+    const cx = barX(i) + barW / 2;
+    const d = Math.abs(mx - cx);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  if (best < 0 || bestDist > 40) {
+    const tip = document.getElementById('ohlc-tip');
+    if (tip) tip.style.display = 'none';
+    return;
+  }
+
+  const c = s[best];
+  const o = parseFloat(c.open), h = parseFloat(c.high), l = parseFloat(c.low), cl = parseFloat(c.close);
+  const chg = cl - o, pct = (chg / o * 100);
+  const color = cl >= o ? '#2dca72' : '#e8432d';
+  const time = new Date(c.time * 1000).toISOString().replace('T',' ').substring(0,19);
+
+  let tip = document.getElementById('ohlc-tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'ohlc-tip';
+    tip.style.cssText = 'position:absolute;pointer-events:none;background:#141933;border:1px solid #252d52;border-radius:6px;padding:8px 12px;font-size:11px;font-family:DM Mono,monospace;color:#c8d0f0;z-index:100;white-space:nowrap;';
+    canvas.parentElement.style.position = 'relative';
+    canvas.parentElement.appendChild(tip);
+  }
+  tip.innerHTML = `<div style="color:#7b5ef0;margin-bottom:4px">${time}</div>
+    <div>O <span style="color:#c8d0f0">${o.toFixed(4)}</span> &nbsp;
+    H <span style="color:#2dca72">${h.toFixed(4)}</span> &nbsp;
+    L <span style="color:#e8432d">${l.toFixed(4)}</span> &nbsp;
+    C <span style="color:${color}">${cl.toFixed(4)}</span></div>
+    <div style="color:${color};margin-top:2px">${chg >= 0 ? '+' : ''}${chg.toFixed(4)} (${pct.toFixed(2)}%)</div>`;
+  const tipX = Math.min(e.clientX - rect.left + 12, canvas.clientWidth - 200);
+  const tipY = e.clientY - rect.top - 10;
+  tip.style.left = tipX + 'px';
+  tip.style.top = tipY + 'px';
+  tip.style.display = 'block';
 }
 
 function renderOHLCTable(candles) {
