@@ -522,7 +522,7 @@ function renderOHLCStats(candles) {
     <div class="stat-card"><div class="stat-label">Period High</div><div class="stat-value" style="color:var(--green)">${hi.toFixed(4)}</div></div>
     <div class="stat-card"><div class="stat-label">Period Low</div><div class="stat-value" style="color:var(--red)">${lo.toFixed(4)}</div></div>
     <div class="stat-card"><div class="stat-label">Last Close</div><div class="stat-value" style="color:var(--amber)">${last.toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Total Volume</div><div class="stat-value" style="color:var(--blue)">${vol.toLocaleString('en',{maximumFractionDigits:0})}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Volume</div><div class="stat-value" style="color:var(--blue)">${vol.toLocaleString('en',{maximumFractionDigits:8})}</div></div>
   `;
 }
 
@@ -767,7 +767,7 @@ function renderOHLCTable(candles) {
       <td class="buy">${fmtP(c.high,6)}</td>
       <td class="sell">${fmtP(c.low,6)}</td>
       <td class="${chg>=0?'buy':'sell'}">${fmtP(c.close,6)}</td>
-      <td class="dim">${parseFloat(c.volume||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
+      <td class="dim">${Number(parseFloat(c.volume||0).toPrecision(10)).toString()}</td>
     </tr>`;
   }
   html += '</tbody></table></div>';
