@@ -137,7 +137,7 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
       <div class="config-row">
         <div class="field" style="max-width:240px;flex:2">
           <label>Since</label>
-          <input type="datetime-local" id="exec-since">
+          <input type="datetime-local" id="exec-since" step="0.001">
           <span class="hint">Optional — leave blank for most recent</span>
         </div>
         <div class="field" style="max-width:180px;flex:1">
@@ -194,11 +194,11 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
         </div>
         <div class="field" style="max-width:220px">
           <label>From</label>
-          <input type="datetime-local" id="ohlc-from">
+          <input type="datetime-local" id="ohlc-from" step="0.001">
         </div>
         <div class="field" style="max-width:220px">
           <label>To</label>
-          <input type="datetime-local" id="ohlc-to">
+          <input type="datetime-local" id="ohlc-to" step="0.001">
         </div>
         <button class="fetch-btn" id="ohlc-btn" onclick="fetchOHLC()">Fetch</button>
       </div>
@@ -226,11 +226,11 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
         </div>
         <div class="field" style="max-width:240px">
           <label>Since</label>
-          <input type="datetime-local" id="mp-since">
+          <input type="datetime-local" id="mp-since" step="0.001">
         </div>
         <div class="field" style="max-width:240px">
           <label>Before</label>
-          <input type="datetime-local" id="mp-before">
+          <input type="datetime-local" id="mp-before" step="0.001">
         </div>
         <button class="fetch-btn" id="mp-btn" onclick="fetchMarkPrice()">Fetch</button>
       </div>
@@ -268,8 +268,9 @@ function copy(id) {
 function tsToMs(s) {
   if (!s || !s.trim()) return null;
   const v = s.trim();
-  // datetime-local gives "2026-05-12T21:22" or "2026-05-12T21:22:00" — append Z for UTC
-  const iso = v.includes('T') ? v + (v.length === 16 ? ':00Z' : 'Z') : v.replace(' ','T') + 'Z';
+  // datetime-local: "2026-05-12T21:22", "T21:22:00", or "T21:22:00.123" — always treat as UTC
+  let iso = v.includes('T') ? v : v.replace(' ', 'T');
+  if (!iso.endsWith('Z') && !iso.match(/[+-]\d{2}:\d{2}$/)) iso += 'Z';
   const d = new Date(iso);
   return isNaN(d) ? null : d.getTime();
 }
@@ -281,7 +282,11 @@ function tsToSec(s) {
 
 function fmtTs(ms) {
   if (!ms) return '—';
-  return new Date(ms).toISOString().replace('T',' ').replace(/\.\d+Z$/,'');
+  const d = new Date(ms);
+  const base = d.toISOString().replace('T',' ').replace('Z','');
+  // Always show 3 decimal places for ms
+  const dotIdx = base.indexOf('.');
+  return dotIdx === -1 ? base + '.000' : base;
 }
 
 function fmtP(n, dp=8) {
