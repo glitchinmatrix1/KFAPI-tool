@@ -132,16 +132,16 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
   <div class="panel active" id="panel-executions">
     <div class="config">
       <div class="config-row">
-        <div class="field" style="max-width:240px">
+        <div class="field" style="max-width:240px;flex:2">
           <label>Since (YYYY-MM-DD HH:MM:SS)</label>
           <input type="text" id="exec-since" placeholder="e.g. 2026-05-12 21:22:00">
           <span class="hint">Leave blank for most recent</span>
         </div>
-        <div class="field" style="max-width:180px">
+        <div class="field" style="max-width:180px;flex:1">
           <label>Contract Symbol</label>
           <input type="text" id="exec-symbol" placeholder="PF_XBTUSD" value="PF_XBTUSD">
         </div>
-        <button class="fetch-btn" id="exec-btn" onclick="fetchExecutions()">Fetch</button>
+        <button class="fetch-btn" id="exec-btn" onclick="fetchExecutions()" style="flex:0">Fetch</button>
       </div>
     </div>
 
