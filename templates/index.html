@@ -644,36 +644,49 @@ function renderOHLCChart(candles) {
     ctx.fillText(label, x, H - padB + 14);
   }
 
-  // OHLC bars
+  // Build Heikin-Ashi values
+  const ha = [];
   for (let i = 0; i < s.length; i++) {
-    const { open, high, low, close } = s[i];
-    const o = parseFloat(open), h = parseFloat(high), l = parseFloat(low), cl = parseFloat(close);
-    const bull = cl >= o;
-    const color = bull ? '#2dca72' : '#e8432d';
-    const x = barX(i);
-    const cx = x + barW / 2;
+    const o = parseFloat(s[i].open), h = parseFloat(s[i].high), l = parseFloat(s[i].low), cl = parseFloat(s[i].close);
+    const haC = (o + h + l + cl) / 4;
+    const haO = i === 0 ? (o + cl) / 2 : (ha[i-1].o + ha[i-1].c) / 2;
+    const haH = Math.max(h, haO, haC);
+    const haL = Math.min(l, haO, haC);
+    ha.push({ o: haO, h: haH, l: haL, c: haC, time: s[i].time,
+               rawO: o, rawH: h, rawL: l, rawC: cl });
+  }
 
-    ctx.strokeStyle = color;
+  // Draw candlesticks
+  for (let i = 0; i < ha.length; i++) {
+    const { o, h, l, c } = ha[i];
+    const bull = c >= o;
+    const bodyColor  = bull ? '#2dca72' : '#e8432d';
+    const wickColor  = bull ? '#1a8f51' : '#a02820';
+    const cx = barX(i) + barW / 2;
+    const bodyTop    = toY(Math.max(o, c));
+    const bodyBot    = toY(Math.min(o, c));
+    const bodyH      = Math.max(1, bodyBot - bodyTop);
+
+    // Wick
+    ctx.strokeStyle = wickColor;
     ctx.lineWidth = 1;
-
-    // High-low wick
     ctx.beginPath();
     ctx.moveTo(cx, toY(h));
     ctx.lineTo(cx, toY(l));
     ctx.stroke();
 
-    // Open tick (left)
-    ctx.beginPath();
-    ctx.moveTo(cx - barW / 2, toY(o));
-    ctx.lineTo(cx, toY(o));
-    ctx.stroke();
+    // Body fill
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(barX(i), bodyTop, barW, bodyH);
 
-    // Close tick (right)
-    ctx.beginPath();
-    ctx.moveTo(cx, toY(cl));
-    ctx.lineTo(cx + barW / 2, toY(cl));
-    ctx.stroke();
+    // Body border
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(barX(i), bodyTop, barW, bodyH);
   }
+
+  // Store HA data for tooltip
+  canvas._haData = ha;
 
   // Tooltip on hover
   canvas._ohlcData = s;
@@ -683,52 +696,59 @@ function renderOHLCChart(candles) {
     const tip = document.getElementById('ohlc-tip');
     if (tip) tip.style.display = 'none';
   };
+  canvas.onmousemove = ohlcTooltip;
 }
 
 function ohlcTooltip(e) {
   const canvas = e.currentTarget;
-  const s = canvas._ohlcData;
-  const { padL, chartW, barX, barW } = canvas._ohlcLayout;
+  const ha = canvas._haData;
+  if (!ha) return;
+  const { barX, barW } = canvas._ohlcLayout;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
 
-  // Find closest bar
   let best = -1, bestDist = Infinity;
-  for (let i = 0; i < s.length; i++) {
+  for (let i = 0; i < ha.length; i++) {
     const cx = barX(i) + barW / 2;
     const d = Math.abs(mx - cx);
     if (d < bestDist) { bestDist = d; best = i; }
   }
-  if (best < 0 || bestDist > 40) {
+  if (best < 0 || bestDist > 60) {
     const tip = document.getElementById('ohlc-tip');
     if (tip) tip.style.display = 'none';
     return;
   }
 
-  const c = s[best];
-  const o = parseFloat(c.open), h = parseFloat(c.high), l = parseFloat(c.low), cl = parseFloat(c.close);
-  const chg = cl - o, pct = (chg / o * 100);
-  const color = cl >= o ? '#2dca72' : '#e8432d';
-  const time = new Date(c.time).toISOString().replace('T',' ').substring(0,19);
+  const d = ha[best];
+  const chg = d.rawC - d.rawO, pct = (chg / d.rawO * 100);
+  const color = d.rawC >= d.rawO ? '#2dca72' : '#e8432d';
+  const time = new Date(d.time).toISOString().replace('T',' ').substring(0,19);
 
   let tip = document.getElementById('ohlc-tip');
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'ohlc-tip';
-    tip.style.cssText = 'position:absolute;pointer-events:none;background:#141933;border:1px solid #252d52;border-radius:6px;padding:8px 12px;font-size:11px;font-family:DM Mono,monospace;color:#c8d0f0;z-index:100;white-space:nowrap;';
-    canvas.parentElement.style.position = 'relative';
-    canvas.parentElement.appendChild(tip);
+    tip.style.cssText = 'position:fixed;pointer-events:none;background:#0d1128;border:1px solid #2a3060;border-radius:8px;padding:10px 14px;font-size:11px;font-family:DM Mono,monospace;color:#c8d0f0;z-index:9999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
+    document.body.appendChild(tip);
   }
-  tip.innerHTML = `<div style="color:#7b5ef0;margin-bottom:4px">${time}</div>
-    <div>O <span style="color:#c8d0f0">${o.toFixed(4)}</span> &nbsp;
-    H <span style="color:#2dca72">${h.toFixed(4)}</span> &nbsp;
-    L <span style="color:#e8432d">${l.toFixed(4)}</span> &nbsp;
-    C <span style="color:${color}">${cl.toFixed(4)}</span></div>
-    <div style="color:${color};margin-top:2px">${chg >= 0 ? '+' : ''}${chg.toFixed(4)} (${pct.toFixed(2)}%)</div>`;
-  const tipX = Math.min(e.clientX - rect.left + 12, canvas.clientWidth - 200);
-  const tipY = e.clientY - rect.top - 10;
-  tip.style.left = tipX + 'px';
-  tip.style.top = tipY + 'px';
+  tip.innerHTML =
+    \`<div style="color:#7b5ef0;margin-bottom:6px;font-size:10px">\${time} UTC</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin-bottom:6px">
+      <div><span style="color:#4a5480;font-size:9px">O </span><span style="color:#e8912d">\${d.rawO.toFixed(4)}</span></div>
+      <div><span style="color:#4a5480;font-size:9px">H </span><span style="color:#2dca72">\${d.rawH.toFixed(4)}</span></div>
+      <div><span style="color:#4a5480;font-size:9px">L </span><span style="color:#e8432d">\${d.rawL.toFixed(4)}</span></div>
+      <div><span style="color:#4a5480;font-size:9px">C </span><span style="color:\${color}">\${d.rawC.toFixed(4)}</span></div>
+    </div>
+    <div style="color:\${color};font-size:10px;border-top:1px solid #1e2545;padding-top:5px">\${chg>=0?'+':''}\${chg.toFixed(4)} (\${pct.toFixed(3)}%)</div>\`;
+
+  // Smart positioning — flip left/up if near edges
+  const TIP_W = 200, TIP_H = 110;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let tx = e.clientX + 16, ty = e.clientY - 10;
+  if (tx + TIP_W > vw - 8) tx = e.clientX - TIP_W - 12;
+  if (ty + TIP_H > vh - 8) ty = e.clientY - TIP_H - 10;
+  tip.style.left = tx + 'px';
+  tip.style.top  = ty + 'px';
   tip.style.display = 'block';
 }
 
