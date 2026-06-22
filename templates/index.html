@@ -5,7 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kraken Futures Data Tool</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+// Initialise all datetime-local pickers with current UTC time, seconds+ms zeroed
+(function initDatePickers() {
+  const now = new Date();
+  // Build "YYYY-MM-DDTHH:MM:00.000" in UTC
+  const pad = n => String(n).padStart(2,'0');
+  const base = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate())
+             + 'T' + pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':00.000';
+  ['exec-since','ohlc-from','ohlc-to','mp-since','mp-before'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = base;
+  });
+})();
+</script>
 <style>
 :root{
   --navy:#0d1128;--navy-mid:#141933;--navy-light:#1c2444;--navy-border:#252d52;
@@ -642,6 +655,19 @@ function renderMPTable(rows) {
   if (rows.length > 300) html += `<p style="font-size:11px;color:var(--text-dim);margin-top:6px">Showing last 300 of ${rows.length.toLocaleString()} rows.</p>`;
   wrap.innerHTML = html;
 }
+
+// Initialise all datetime-local pickers with current UTC time, seconds+ms zeroed
+(function initDatePickers() {
+  const now = new Date();
+  // Build "YYYY-MM-DDTHH:MM:00.000" in UTC
+  const pad = n => String(n).padStart(2,'0');
+  const base = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate())
+             + 'T' + pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':00.000';
+  ['exec-since','ohlc-from','ohlc-to','mp-since','mp-before'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = base;
+  });
+})();
 </script>
 </body>
 </html>
