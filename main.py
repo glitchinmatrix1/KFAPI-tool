@@ -120,7 +120,8 @@ async def get_markprice(
         ts = el.get("timestamp")
         ev = el.get("event", {})
         price = (
-            ev.get("markPriceChanged", {}).get("price")
+            ev.get("MarkPriceChanged", {}).get("price")
+            or ev.get("markPriceChanged", {}).get("price")
             or ev.get("price")
         )
         if price is not None:
