@@ -543,8 +543,12 @@ function renderOHLCChart(candles) {
   const yRange = yMax - yMin || 1;
 
   const toY = v => padT + chartH - ((v - yMin) / yRange) * chartH;
-  const barW = Math.max(1, Math.floor(chartW / s.length) - 1);
-  const barX = i => padL + i * (chartW / s.length) + (chartW / s.length - barW) / 2;
+  // For single candle, centre it; otherwise spread evenly
+  const slotW = s.length === 1 ? chartW : chartW / s.length;
+  const barW = s.length === 1 ? Math.min(40, chartW * 0.1) : Math.max(2, Math.floor(slotW) - 2);
+  const barX = i => s.length === 1
+    ? padL + chartW / 2 - barW / 2
+    : padL + i * slotW + (slotW - barW) / 2;
 
   // Background
   ctx.fillStyle = '#0d1128';
@@ -569,7 +573,7 @@ function renderOHLCChart(candles) {
   const xStep = Math.max(1, Math.floor(s.length / 8));
   for (let i = 0; i < s.length; i += xStep) {
     const x = barX(i) + barW / 2;
-    const label = new Date(s[i].time * 1000).toISOString().substring(5, 16).replace('T', ' ');
+    const label = new Date(s[i].time).toISOString().substring(5, 16).replace('T', ' ');
     ctx.fillText(label, x, H - padB + 14);
   }
 
@@ -638,7 +642,7 @@ function ohlcTooltip(e) {
   const o = parseFloat(c.open), h = parseFloat(c.high), l = parseFloat(c.low), cl = parseFloat(c.close);
   const chg = cl - o, pct = (chg / o * 100);
   const color = cl >= o ? '#2dca72' : '#e8432d';
-  const time = new Date(c.time * 1000).toISOString().replace('T',' ').substring(0,19);
+  const time = new Date(c.time).toISOString().replace('T',' ').substring(0,19);
 
   let tip = document.getElementById('ohlc-tip');
   if (!tip) {
@@ -669,7 +673,7 @@ function renderOHLCTable(candles) {
   for (const c of show) {
     const chg = parseFloat(c.close) - parseFloat(c.open);
     html += `<tr>
-      <td>${new Date(c.time*1000).toISOString().replace('T',' ').substring(0,19)}</td>
+      <td>${new Date(c.time).toISOString().replace('T',' ').substring(0,19)}</td>
       <td class="price">${fmtP(c.open,6)}</td>
       <td class="buy">${fmtP(c.high,6)}</td>
       <td class="sell">${fmtP(c.low,6)}</td>
