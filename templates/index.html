@@ -609,7 +609,10 @@ function renderOHLCChart(candles) {
   const toY = v => padT + chartH - ((v - yMin) / yRange) * chartH;
   // For single candle, centre it; otherwise spread evenly
   const slotW = s.length === 1 ? chartW : chartW / s.length;
-  const barW = s.length === 1 ? Math.min(40, chartW * 0.1) : Math.max(2, Math.floor(slotW) - 2);
+  // Cap bar width: never wider than 18px, always at least 2px, use 60% of slot
+  const barW = s.length === 1
+    ? Math.min(18, chartW * 0.06)
+    : Math.min(18, Math.max(2, Math.floor(slotW * 0.6)));
   const barX = i => s.length === 1
     ? padL + chartW / 2 - barW / 2
     : padL + i * slotW + (slotW - barW) / 2;
