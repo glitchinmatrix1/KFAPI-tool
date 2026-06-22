@@ -1,673 +1,140 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kraken Futures Data Tool</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
-// Initialise all datetime-local pickers with current UTC time, seconds+ms zeroed
-(function initDatePickers() {
-  const now = new Date();
-  // Build "YYYY-MM-DDTHH:MM:00.000" in UTC
-  const pad = n => String(n).padStart(2,'0');
-  const base = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate())
-             + 'T' + pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':00.000';
-  ['exec-since','ohlc-from','ohlc-to','mp-since','mp-before'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = base;
-  });
-})();
-</script>
-<style>
-:root{
-  --navy:#0d1128;--navy-mid:#141933;--navy-light:#1c2444;--navy-border:#252d52;
-  --purple:#5c3de8;--purple-light:#7b5ef0;--purple-glow:rgba(92,61,232,0.18);
-  --amber:#e8912d;--amber-bg:rgba(232,145,45,0.08);--amber-border:rgba(232,145,45,0.3);
-  --blue:#3d8fe8;--green:#2dca72;--red:#e84040;
-  --text:#e8ecf8;--text-muted:#7d8ab5;--text-dim:#4a5480;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--navy);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6;min-height:100vh;padding:1.75rem 1.5rem 4rem}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--navy-border) 1px,transparent 1px),linear-gradient(90deg,var(--navy-border) 1px,transparent 1px);background-size:40px 40px;opacity:.18;pointer-events:none;z-index:0}
-.page{max-width:1080px;margin:0 auto;position:relative;z-index:1}
-
-/* Header */
-.page-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.75rem;padding-bottom:1.25rem;border-bottom:1px solid var(--navy-border)}
-.header-icon{width:42px;height:42px;background:var(--purple);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 18px var(--purple-glow)}
-.header-icon svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round}
-h1{font-size:19px;font-weight:600;letter-spacing:-0.02em}
-.breadcrumb{font-size:11px;color:var(--text-dim);margin-bottom:3px}
-.breadcrumb span{color:var(--text-muted)}
-
-/* Tabs */
-.tabs{display:flex;gap:3px;background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:10px;padding:4px;margin-bottom:1.75rem;width:fit-content}
-.tab{padding:7px 18px;border:none;background:transparent;color:var(--text-muted);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border-radius:7px;transition:all .15s}
-.tab:hover{color:var(--text);background:var(--navy-light)}
-.tab.active{background:var(--purple);color:#fff;box-shadow:0 0 10px var(--purple-glow)}
-
-/* Panels */
-.panel{display:none}.panel.active{display:block}
-
-/* Config card */
-.config{background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.25rem}
-.config-row{display:flex;flex-wrap:wrap;gap:.875rem;align-items:flex-end}
-.field{display:flex;flex-direction:column;gap:5px;min-width:160px;flex:1}
-.field label{font-size:11px;font-weight:500;color:var(--purple-light);text-transform:uppercase;letter-spacing:.08em}
-.field input,.field select{background:var(--navy);border:0.5px solid var(--navy-border);color:var(--text);font-family:'DM Mono',monospace;font-size:12.5px;padding:7px 11px;border-radius:7px;outline:none;transition:border-color .15s;width:100%}
-.field input:focus,.field select:focus{border-color:var(--purple-light)}
-.field input[type="datetime-local"]{cursor:pointer;color-scheme:dark}
-.field input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:invert(0.6) sepia(1) saturate(3) hue-rotate(200deg);cursor:pointer;opacity:0.7}
-.field input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover{opacity:1}
-.field select option{background:var(--navy-mid)}
-.field .hint{font-size:10.5px;color:var(--text-dim);margin-top:3px}
-.fetch-btn{padding:8px 20px;background:var(--purple);border:none;color:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;border-radius:7px;cursor:pointer;transition:background .15s;white-space:nowrap;align-self:flex-end;height:34px}
-.fetch-btn:hover{background:var(--purple-light)}
-.fetch-btn:disabled{opacity:.45;cursor:not-allowed}
-
-/* URL bar */
-.url-bar{display:none;align-items:center;gap:8px;background:var(--navy);border:0.5px solid var(--navy-border);border-radius:7px;padding:7px 11px;margin-bottom:1.25rem;font-family:'DM Mono',monospace;font-size:11px;color:var(--amber);word-break:break-all}
-.url-bar.show{display:flex}
-.url-bar span{flex:1}
-.copy-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px 4px;border-radius:4px;font-size:11px;white-space:nowrap;font-family:'DM Sans',sans-serif}
-.copy-btn:hover{color:var(--text)}
-
-/* Status */
-.status-bar{display:none;align-items:center;gap:8px;margin-bottom:1rem;font-size:12px;color:var(--text-muted)}
-.status-bar.show{display:flex}
-.status-dot{width:6px;height:6px;border-radius:50%;background:var(--text-dim);flex-shrink:0}
-.status-dot.loading{background:var(--amber);animation:pulse 1s infinite}
-.status-dot.ok{background:var(--green)}
-.status-dot.err{background:var(--red)}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* Stats row */
-.stats-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem}
-.stat-card{background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:8px;padding:9px 14px;flex:1;min-width:110px}
-.stat-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px}
-.stat-value{font-size:17px;font-weight:600;font-family:'DM Mono',monospace}
-
-/* Table */
-.table-wrap{overflow-x:auto;border:0.5px solid var(--navy-border);border-radius:10px}
-table{width:100%;border-collapse:collapse;font-size:11.5px}
-thead tr{background:#0b0f22;border-bottom:2px solid var(--purple)}
-thead th{padding:8px 11px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
-tbody tr{border-bottom:0.5px solid var(--navy-border);transition:background .1s}
-tbody tr:last-child{border-bottom:none}
-tbody tr:hover{background:rgba(92,61,232,.07)}
-tbody td{padding:7px 11px;color:#c8d0f0;font-family:'DM Mono',monospace;white-space:nowrap}
-td.buy{color:var(--green)}td.sell{color:var(--red)}
-td.price{color:var(--amber)}td.dim{color:var(--text-muted)}
-td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis}
-
-/* Pagination */
-.pagination{display:flex;align-items:center;gap:8px;margin-top:10px;justify-content:flex-end}
-.page-btn{padding:5px 12px;background:var(--navy-mid);border:0.5px solid var(--navy-border);color:var(--text-muted);font-family:'DM Sans',sans-serif;font-size:12px;border-radius:6px;cursor:pointer}
-.page-btn:hover{border-color:var(--purple-light);color:var(--text)}
-.page-btn:disabled{opacity:.4;cursor:default}
-.page-info{font-size:11.5px;color:var(--text-dim)}
-
-/* Chart */
-.chart-card{background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.25rem}
-.chart-card canvas{width:100%!important}
-
-/* Continue */
-.cont-row{margin-top:10px;display:flex;align-items:center;gap:10px}
-.cont-btn{padding:6px 15px;background:transparent;border:0.5px solid var(--purple-light);color:var(--purple-light);font-family:'DM Sans',sans-serif;font-size:12px;border-radius:6px;cursor:pointer}
-.cont-btn:hover{background:rgba(92,61,232,.15)}
-.cont-note{font-size:11px;color:var(--text-dim)}
-
-/* Error */
-.error-box{background:rgba(232,64,64,.08);border:0.5px solid rgba(232,64,64,.3);color:#e88585;border-radius:8px;padding:9px 13px;font-size:12.5px;margin-bottom:1rem;display:none}
-.error-box.show{display:block}
-
-/* Empty */
-.empty{text-align:center;padding:3rem 1rem;color:var(--text-dim);font-size:13px}
-</style>
-</head>
-<body>
-<div class="page">
-
-  <div class="page-header">
-    <div class="header-icon">
-      <svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-    </div>
-    <div>
-      <div class="breadcrumb">CE Trading XP <span>/</span> Futures <span>/</span> Data Tool</div>
-      <h1>Kraken Futures Data Tool</h1>
-    </div>
-  </div>
-
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('executions',this)">Get Executions</button>
-    <button class="tab" onclick="switchTab('ohlc',this)">OHLC</button>
-    <button class="tab" onclick="switchTab('markprice',this)">Mark Price</button>
-  </div>
-
-  <!-- ═══════════ EXECUTIONS ═══════════ -->
-  <div class="panel active" id="panel-executions">
-    <div class="config">
-      <div class="config-row">
-        <div class="field" style="max-width:240px;flex:2">
-          <label>Since</label>
-          <input type="datetime-local" id="exec-since" step="0.001">
-          <span class="hint">Optional — leave blank for most recent</span>
-        </div>
-        <div class="field" style="max-width:180px;flex:1">
-          <label>Contract Symbol</label>
-          <input type="text" id="exec-symbol" placeholder="PF_XBTUSD" value="PF_XBTUSD">
-          <span class="hint">&nbsp;</span>
-        </div>
-        <button class="fetch-btn" id="exec-btn" onclick="fetchExecutions()" style="flex:0;margin-bottom:18px">Fetch</button>
-      </div>
-    </div>
-
-    <div class="url-bar" id="exec-url">
-      <span id="exec-url-text"></span>
-      <button class="copy-btn" onclick="copy('exec-url-text')">copy URL</button>
-    </div>
-    <div class="status-bar" id="exec-status"><div class="status-dot" id="exec-dot"></div><span id="exec-status-text"></span></div>
-    <div class="error-box" id="exec-error"></div>
-
-    <div id="exec-stats" class="stats-row" style="display:none"></div>
-    <div id="exec-results"></div>
-    <div class="cont-row" id="exec-cont" style="display:none">
-      <button class="cont-btn" onclick="fetchExecutionsCont()">Load next page →</button>
-      <span class="cont-note" id="exec-cont-note"></span>
-    </div>
-  </div>
-
-  <!-- ═══════════ OHLC ═══════════ -->
-  <div class="panel" id="panel-ohlc">
-    <div class="config">
-      <div class="config-row">
-        <div class="field" style="max-width:180px">
-          <label>Contract Symbol</label>
-          <input type="text" id="ohlc-symbol" placeholder="PF_XBTUSD" value="PF_XBTUSD">
-        </div>
-        <div class="field" style="max-width:130px">
-          <label>Price Type</label>
-          <select id="ohlc-pricetype">
-            <option value="mark">Mark</option>
-            <option value="spot">Spot</option>
-            <option value="trade">Trade</option>
-          </select>
-        </div>
-        <div class="field" style="max-width:130px">
-          <label>Interval</label>
-          <select id="ohlc-interval">
-            <option value="1m">1 minute</option>
-            <option value="5m">5 minutes</option>
-            <option value="15m">15 minutes</option>
-            <option value="1h">1 hour</option>
-            <option value="4h">4 hours</option>
-            <option value="1d">1 day</option>
-            <option value="1w">1 week</option>
-          </select>
-        </div>
-        <div class="field" style="max-width:220px">
-          <label>From</label>
-          <input type="datetime-local" id="ohlc-from" step="0.001">
-        </div>
-        <div class="field" style="max-width:220px">
-          <label>To</label>
-          <input type="datetime-local" id="ohlc-to" step="0.001">
-        </div>
-        <button class="fetch-btn" id="ohlc-btn" onclick="fetchOHLC()">Fetch</button>
-      </div>
-    </div>
-
-    <div class="url-bar" id="ohlc-url">
-      <span id="ohlc-url-text"></span>
-      <button class="copy-btn" onclick="copy('ohlc-url-text')">copy URL</button>
-    </div>
-    <div class="status-bar" id="ohlc-status"><div class="status-dot" id="ohlc-dot"></div><span id="ohlc-status-text"></span></div>
-    <div class="error-box" id="ohlc-error"></div>
-
-    <div id="ohlc-stats" class="stats-row" style="display:none"></div>
-    <div class="chart-card" id="ohlc-chart-card" style="display:none"><canvas id="ohlc-canvas" height="260"></canvas></div>
-    <div id="ohlc-results"></div>
-  </div>
-
-  <!-- ═══════════ MARK PRICE ═══════════ -->
-  <div class="panel" id="panel-markprice">
-    <div class="config">
-      <div class="config-row">
-        <div class="field" style="max-width:180px">
-          <label>Contract Symbol</label>
-          <input type="text" id="mp-symbol" placeholder="PF_XBTUSD" value="PF_XBTUSD">
-        </div>
-        <div class="field" style="max-width:240px">
-          <label>Since</label>
-          <input type="datetime-local" id="mp-since" step="0.001">
-        </div>
-        <div class="field" style="max-width:240px">
-          <label>Before</label>
-          <input type="datetime-local" id="mp-before" step="0.001">
-        </div>
-        <button class="fetch-btn" id="mp-btn" onclick="fetchMarkPrice()">Fetch</button>
-      </div>
-    </div>
-
-    <div class="url-bar" id="mp-url">
-      <span id="mp-url-text"></span>
-      <button class="copy-btn" onclick="copy('mp-url-text')">copy URL</button>
-    </div>
-    <div class="status-bar" id="mp-status"><div class="status-dot" id="mp-dot"></div><span id="mp-status-text"></span></div>
-    <div class="error-box" id="mp-error"></div>
-
-    <div id="mp-stats" class="stats-row" style="display:none"></div>
-    <div class="chart-card" id="mp-chart-card" style="display:none"><canvas id="mp-canvas" height="220"></canvas></div>
-    <div id="mp-results"></div>
-  </div>
-
-</div><!-- end .page -->
-<script>
-let execContToken = null, execAllRows = [], execPage = 0;
-const PAGE_SIZE = 100;
-let ohlcChart = null, mpChart = null;
-
-function switchTab(name, btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('panel-' + name).classList.add('active');
-}
-
-function copy(id) {
-  navigator.clipboard.writeText(document.getElementById(id).textContent).catch(()=>{});
-}
-
-function tsToMs(s) {
-  if (!s || !s.trim()) return null;
-  const v = s.trim();
-  let iso = v.includes('T') ? v : v.replace(' ', 'T');
-  // Normalise to full precision with ms defaulting to .000
-  if (iso.length === 16) iso += ':00.000';       // "T21:22"       → add :ss.mmm
-  else if (iso.length === 19) iso += '.000';      // "T21:22:00"    → add .mmm
-  // else already has ms e.g. "T21:22:00.123"
-  if (!iso.endsWith('Z') && !iso.match(/[+-]\d{2}:\d{2}$/)) iso += 'Z';
-  const d = new Date(iso);
-  return isNaN(d) ? null : d.getTime();
-}
-
-function tsToSec(s) {
-  const ms = tsToMs(s);
-  return ms ? Math.floor(ms / 1000) : null;
-}
-
-function fmtTs(ms) {
-  if (!ms) return '—';
-  const d = new Date(ms);
-  const base = d.toISOString().replace('T',' ').replace('Z','');
-  // Always show 3 decimal places for ms
-  const dotIdx = base.indexOf('.');
-  return dotIdx === -1 ? base + '.000' : base;
-}
-
-function fmtP(n, dp=8) {
-  if (n === null || n === undefined || n === '') return '—';
-  return parseFloat(n).toFixed(dp);
-}
-
-function setStatus(p, cls, text) {
-  const bar = document.getElementById(p+'-status');
-  bar.className = 'status-bar show';
-  const dot = document.getElementById(p+'-dot');
-  dot.className = 'status-dot ' + cls;
-  document.getElementById(p+'-status-text').textContent = text;
-}
-
-function showErr(p, msg) {
-  const el = document.getElementById(p+'-error');
-  el.textContent = msg;
-  el.className = 'error-box show';
-}
-function hideErr(p) { document.getElementById(p+'-error').className = 'error-box'; }
-
-function showUrl(p, url) {
-  document.getElementById(p+'-url-text').textContent = url;
-  document.getElementById(p+'-url').className = 'url-bar show';
-}
-
-// ── EXECUTIONS ──────────────────────────────
-
-async function fetchExecutions(cont) {
-  const sym = document.getElementById('exec-symbol').value.trim().toUpperCase();
-  const since = document.getElementById('exec-since').value.trim();
-  if (!sym) { showErr('exec','Contract symbol is required.'); return; }
-
-  const params = new URLSearchParams({ symbol: sym });
-  if (since) {
-    const ms = tsToMs(since);
-    if (!ms) { showErr('exec','Invalid date format. Use YYYY-MM-DD HH:MM:SS'); return; }
-    params.set('since', ms);
-  }
-  if (cont) params.set('continuationToken', cont);
-
-  if (!cont) { execAllRows = []; execPage = 0; execContToken = null; }
-
-  const apiUrl = '/api/executions?' + params.toString();
-  const krakUrl = `https://futures.kraken.com/api/history/v2/market/${sym}/executions?sort=asc${since ? '&since=' + tsToMs(since) : ''}${cont ? '&continuationToken=' + encodeURIComponent(cont) : ''}`;
-  showUrl('exec', krakUrl);
-  document.getElementById('exec-btn').disabled = true;
-  setStatus('exec','loading','Fetching…');
-  hideErr('exec');
-
-  try {
-    const r = await fetch(apiUrl);
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Server error ' + r.status);
-
-    execAllRows = execAllRows.concat(data.rows || []);
-    execContToken = data.continuationToken || null;
-
-    if (!execAllRows.length) {
-      showErr('exec','No executions returned for this symbol / time range.');
-      setStatus('exec','err','No data');
-    } else {
-      renderExecStats();
-      renderExecTable();
-      const contRow = document.getElementById('exec-cont');
-      if (execContToken) {
-        contRow.style.display = 'flex';
-        document.getElementById('exec-cont-note').textContent = 'More results available.';
-      } else {
-        contRow.style.display = 'none';
-      }
-      setStatus('exec','ok', execAllRows.length.toLocaleString() + ' executions' + (execContToken ? ' · more available' : ''));
-    }
-  } catch(e) {
-    showErr('exec', 'Error: ' + e.message);
-    setStatus('exec','err','Failed');
-  }
-  document.getElementById('exec-btn').disabled = false;
-}
-
-function fetchExecutionsCont() {
-  if (execContToken) fetchExecutions(execContToken);
-}
-
-function renderExecStats() {
-  const el = document.getElementById('exec-stats');
-  el.style.display = 'flex';
-  const buys = execAllRows.filter(r => r.makerDirection==='Buy'||r.takerDirection==='Buy').length;
-  const sells = execAllRows.filter(r => r.makerDirection==='Sell'||r.takerDirection==='Sell').length;
-  const totalUsd = execAllRows.reduce((a,r) => a + (parseFloat(r.usdValue)||0), 0);
-  const last = execAllRows.length ? execAllRows[execAllRows.length-1] : null;
-  el.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Executions</div><div class="stat-value" style="color:var(--purple-light)">${execAllRows.length.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">Buys</div><div class="stat-value" style="color:var(--green)">${buys.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">Sells</div><div class="stat-value" style="color:var(--red)">${sells.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">Total USD Value</div><div class="stat-value" style="color:var(--amber)">$${totalUsd.toLocaleString('en',{maximumFractionDigits:2})}</div></div>
-    ${last ? `<div class="stat-card"><div class="stat-label">Last Price</div><div class="stat-value" style="color:var(--blue)">${fmtP(last.price,6)}</div></div>` : ''}
-  `;
-}
-
-function renderExecTable() {
-  const wrap = document.getElementById('exec-results');
-  const total = execAllRows.length;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const start = execPage * PAGE_SIZE;
-  const rows = execAllRows.slice(start, start + PAGE_SIZE);
-
-  if (!rows.length) { wrap.innerHTML = '<div class="empty">No rows to display.</div>'; return; }
-
-  let html = `<div class="table-wrap"><table>
-    <thead><tr>
-      <th>Time (UTC)</th><th>Contract</th><th>Maker Dir</th><th>Taker Dir</th>
-      <th>Price</th><th>Qty</th><th>USD Value</th><th>Mark Price</th>
-      <th>Maker Type</th><th>Taker Type</th><th>Exec UID</th>
-    </tr></thead><tbody>`;
-
-  for (const r of rows) {
-    const dir = r.makerDirection || r.takerDirection || '';
-    html += `<tr>
-      <td>${fmtTs(r.time)}</td>
-      <td class="price">${r.tradeable||'—'}</td>
-      <td class="${r.makerDirection==='Buy'?'buy':r.makerDirection==='Sell'?'sell':'dim'}">${r.makerDirection||'—'}</td>
-      <td class="${r.takerDirection==='Buy'?'buy':r.takerDirection==='Sell'?'sell':'dim'}">${r.takerDirection||'—'}</td>
-      <td class="price">${fmtP(r.price,8)}</td>
-      <td>${fmtP(r.quantity,4)}</td>
-      <td class="price">$${fmtP(r.usdValue,2)}</td>
-      <td class="dim">${fmtP(r.markPrice,8)}</td>
-      <td class="dim">${r.makerOrderType||'—'}</td>
-      <td class="dim">${r.takerOrderType||'—'}</td>
-      <td class="uid" title="${r.uid}">${r.uid||'—'}</td>
-    </tr>`;
-  }
-  html += `</tbody></table></div>`;
-  html += `<div class="pagination">
-    <button class="page-btn" onclick="execNav(-1)" ${execPage===0?'disabled':''}>← Prev</button>
-    <span class="page-info">Page ${execPage+1} of ${totalPages} &nbsp;(${total.toLocaleString()} rows total)</span>
-    <button class="page-btn" onclick="execNav(1)" ${execPage>=totalPages-1?'disabled':''}>Next →</button>
-  </div>`;
-  wrap.innerHTML = html;
-}
-
-function execNav(d) {
-  const tp = Math.ceil(execAllRows.length / PAGE_SIZE);
-  execPage = Math.max(0, Math.min(tp-1, execPage+d));
-  renderExecTable();
-  document.getElementById('exec-results').scrollIntoView({behavior:'smooth', block:'start'});
-}
-
-// ── OHLC ──────────────────────────────
-
-async function fetchOHLC() {
-  const sym = document.getElementById('ohlc-symbol').value.trim().toUpperCase();
-  const pt = document.getElementById('ohlc-pricetype').value;
-  const interval = document.getElementById('ohlc-interval').value;
-  const from = document.getElementById('ohlc-from').value.trim();
-  const to = document.getElementById('ohlc-to').value.trim();
-  if (!sym) { showErr('ohlc','Contract symbol is required.'); return; }
-
-  const params = new URLSearchParams({ symbol: sym, priceType: pt, interval });
-  const fromSec = tsToSec(from), toSec = tsToSec(to);
-  if (fromSec) params.set('fromTs', fromSec);
-  if (toSec) params.set('toTs', toSec);
-
-  const krakUrl = `https://futures.kraken.com/api/charts/v1/${pt}/${sym}/${interval}${fromSec||toSec ? '?'+(fromSec?'from='+fromSec:'')+(fromSec&&toSec?'&':'')+(toSec?'to='+toSec:'') : ''}`;
-  showUrl('ohlc', krakUrl);
-  document.getElementById('ohlc-btn').disabled = true;
-  setStatus('ohlc','loading','Fetching…');
-  hideErr('ohlc');
-
-  try {
-    const r = await fetch('/api/ohlc?' + params.toString());
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Server error ' + r.status);
-
-    const candles = data.candles || [];
-    if (!candles.length) { showErr('ohlc','No candles returned.'); setStatus('ohlc','err','No data'); document.getElementById('ohlc-btn').disabled=false; return; }
-
-    setStatus('ohlc','ok', candles.length.toLocaleString() + ' candles');
-    renderOHLCStats(candles);
-    renderOHLCChart(candles);
-    renderOHLCTable(candles);
-  } catch(e) {
-    showErr('ohlc','Error: ' + e.message);
-    setStatus('ohlc','err','Failed');
-  }
-  document.getElementById('ohlc-btn').disabled = false;
-}
-
-function renderOHLCStats(candles) {
-  const el = document.getElementById('ohlc-stats');
-  el.style.display = 'flex';
-  const hi = Math.max(...candles.map(c=>parseFloat(c.high)));
-  const lo = Math.min(...candles.map(c=>parseFloat(c.low)));
-  const last = parseFloat(candles[candles.length-1].close);
-  const vol = candles.reduce((a,c)=>a+(parseFloat(c.volume)||0),0);
-  el.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Candles</div><div class="stat-value" style="color:var(--purple-light)">${candles.length.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">Period High</div><div class="stat-value" style="color:var(--green)">${hi.toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Period Low</div><div class="stat-value" style="color:var(--red)">${lo.toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Last Close</div><div class="stat-value" style="color:var(--amber)">${last.toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Total Volume</div><div class="stat-value" style="color:var(--blue)">${vol.toLocaleString('en',{maximumFractionDigits:0})}</div></div>
-  `;
-}
-
-function renderOHLCChart(candles) {
-  const card = document.getElementById('ohlc-chart-card');
-  card.style.display = 'block';
-  const ctx = document.getElementById('ohlc-canvas').getContext('2d');
-  if (ohlcChart) ohlcChart.destroy();
-
-  const step = Math.max(1, Math.floor(candles.length / 200));
-  const s = candles.filter((_,i) => i%step===0);
-  const labels = s.map(c => new Date(c.time*1000).toISOString().substring(11,16));
-  const closes = s.map(c => parseFloat(c.close));
-  const vols = s.map(c => parseFloat(c.volume||0));
-
-  ohlcChart = new Chart(ctx, {
-    data: {
-      labels,
-      datasets: [
-        { type:'line', label:'Close', data:closes, borderColor:'#2dca72', borderWidth:1.5, pointRadius:0, tension:0.1, yAxisID:'y', order:1 },
-        { type:'bar',  label:'Volume', data:vols, backgroundColor:'rgba(232,145,45,0.22)', yAxisID:'vol', order:2 }
-      ]
-    },
-    options: {
-      responsive:true, animation:false,
-      plugins:{ legend:{display:false}, tooltip:{ mode:'index', intersect:false, backgroundColor:'#141933', titleColor:'#7b5ef0', bodyColor:'#c8d0f0', borderColor:'#252d52', borderWidth:1 }},
-      scales:{
-        x:{ ticks:{color:'#4a5480', maxTicksLimit:12, font:{size:10}}, grid:{color:'rgba(37,45,82,.5)'}},
-        y:{ position:'left', ticks:{color:'#7d8ab5', font:{size:10}, callback:v=>v.toFixed(4)}, grid:{color:'rgba(37,45,82,.5)'}},
-        vol:{ position:'right', ticks:{color:'#4a5480', font:{size:10}}, grid:{drawOnChartArea:false}}
-      }
-    }
-  });
-}
-
-function renderOHLCTable(candles) {
-  const wrap = document.getElementById('ohlc-results');
-  const show = candles.slice(-200);
-  let html = `<div class="table-wrap"><table>
-    <thead><tr><th>Time (UTC)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead><tbody>`;
-  for (const c of show) {
-    const chg = parseFloat(c.close) - parseFloat(c.open);
-    html += `<tr>
-      <td>${new Date(c.time*1000).toISOString().replace('T',' ').substring(0,19)}</td>
-      <td class="price">${fmtP(c.open,6)}</td>
-      <td class="buy">${fmtP(c.high,6)}</td>
-      <td class="sell">${fmtP(c.low,6)}</td>
-      <td class="${chg>=0?'buy':'sell'}">${fmtP(c.close,6)}</td>
-      <td class="dim">${parseFloat(c.volume||0).toLocaleString('en',{maximumFractionDigits:0})}</td>
-    </tr>`;
-  }
-  html += '</tbody></table></div>';
-  if (candles.length > 200) html += `<p style="font-size:11px;color:var(--text-dim);margin-top:6px">Showing last 200 of ${candles.length.toLocaleString()} candles.</p>`;
-  wrap.innerHTML = html;
-}
-
-// ── MARK PRICE ──────────────────────────────
-
-async function fetchMarkPrice() {
-  const sym = document.getElementById('mp-symbol').value.trim().toUpperCase();
-  const since = document.getElementById('mp-since').value.trim();
-  const before = document.getElementById('mp-before').value.trim();
-  if (!sym) { showErr('mp','Contract symbol is required.'); return; }
-
-  const params = new URLSearchParams({ symbol: sym });
-  const sinceMs = tsToMs(since), beforeMs = tsToMs(before);
-  if (sinceMs) params.set('since', sinceMs);
-  if (beforeMs) params.set('before', beforeMs);
-
-  const krakUrl = `https://futures.kraken.com/api/history/v2/market/${sym}/price?sort=asc${sinceMs?'&since='+sinceMs:''}${beforeMs?'&before='+beforeMs:''}`;
-  showUrl('mp', krakUrl);
-  document.getElementById('mp-btn').disabled = true;
-  setStatus('mp','loading','Fetching…');
-  hideErr('mp');
-
-  try {
-    const r = await fetch('/api/markprice?' + params.toString());
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Server error ' + r.status);
-
-    const rows = data.rows || [];
-    if (!rows.length) { showErr('mp','No data returned.'); setStatus('mp','err','No data'); document.getElementById('mp-btn').disabled=false; return; }
-
-    setStatus('mp','ok', rows.length.toLocaleString() + ' data points');
-    renderMPStats(rows);
-    renderMPChart(rows);
-    renderMPTable(rows);
-  } catch(e) {
-    showErr('mp','Error: ' + e.message);
-    setStatus('mp','err','Failed');
-  }
-  document.getElementById('mp-btn').disabled = false;
-}
-
-function renderMPStats(rows) {
-  const el = document.getElementById('mp-stats');
-  el.style.display = 'flex';
-  const prices = rows.map(r => parseFloat(r.price));
-  const first = prices[0], last = prices[prices.length-1];
-  const delta = last - first;
-  el.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Data Points</div><div class="stat-value" style="color:var(--purple-light)">${rows.length.toLocaleString()}</div></div>
-    <div class="stat-card"><div class="stat-label">Min</div><div class="stat-value" style="color:var(--red)">${Math.min(...prices).toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Max</div><div class="stat-value" style="color:var(--green)">${Math.max(...prices).toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Latest</div><div class="stat-value" style="color:var(--amber)">${last.toFixed(4)}</div></div>
-    <div class="stat-card"><div class="stat-label">Δ Period</div><div class="stat-value" style="color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${delta.toFixed(4)}</div></div>
-  `;
-}
-
-function renderMPChart(rows) {
-  const card = document.getElementById('mp-chart-card');
-  card.style.display = 'block';
-  const ctx = document.getElementById('mp-canvas').getContext('2d');
-  if (mpChart) mpChart.destroy();
-
-  const step = Math.max(1, Math.floor(rows.length / 300));
-  const s = rows.filter((_,i) => i%step===0);
-  const labels = s.map(r => fmtTs(r.timestamp).substring(11,19));
-  const prices = s.map(r => parseFloat(r.price));
-
-  mpChart = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets:[{ data:prices, borderColor:'#7b5ef0', borderWidth:1.5, pointRadius:0, tension:0.1, fill:{target:'origin', above:'rgba(92,61,232,0.07)'}}]},
-    options:{
-      responsive:true, animation:false,
-      plugins:{ legend:{display:false}, tooltip:{ mode:'index', intersect:false, backgroundColor:'#141933', titleColor:'#7b5ef0', bodyColor:'#c8d0f0', borderColor:'#252d52', borderWidth:1, callbacks:{ label:c=>c.parsed.y.toFixed(6)}}},
-      scales:{
-        x:{ ticks:{color:'#4a5480', maxTicksLimit:10, font:{size:10}}, grid:{color:'rgba(37,45,82,.5)'}},
-        y:{ ticks:{color:'#7d8ab5', font:{size:10}, callback:v=>v.toFixed(2)}, grid:{color:'rgba(37,45,82,.5)'}}
-      }
-    }
-  });
-}
-
-function renderMPTable(rows) {
-  const wrap = document.getElementById('mp-results');
-  const show = rows.slice(-300);
-  let html = `<div class="table-wrap"><table>
-    <thead><tr><th>Time (UTC)</th><th>Unix Timestamp (ms)</th><th>Mark Price</th></tr></thead><tbody>`;
-  for (const r of show) {
-    html += `<tr>
-      <td>${fmtTs(r.timestamp)}</td>
-      <td class="dim">${r.timestamp}</td>
-      <td class="price">${fmtP(r.price,8)}</td>
-    </tr>`;
-  }
-  html += '</tbody></table></div>';
-  if (rows.length > 300) html += `<p style="font-size:11px;color:var(--text-dim);margin-top:6px">Showing last 300 of ${rows.length.toLocaleString()} rows.</p>`;
-  wrap.innerHTML = html;
-}
-
-// Initialise all datetime-local pickers with current UTC time, seconds+ms zeroed
-(function initDatePickers() {
-  const now = new Date();
-  // Build "YYYY-MM-DDTHH:MM:00.000" in UTC
-  const pad = n => String(n).padStart(2,'0');
-  const base = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate())
-             + 'T' + pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':00.000';
-  ['exec-since','ohlc-from','ohlc-to','mp-since','mp-before'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = base;
-  });
-})();
-</script>
-</body>
-</html>
+import httpx
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
+import os
+
+app = FastAPI(title="Kraken Futures Tool")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
+KRAKEN_BASE = "https://futures.kraken.com"
+TIMEOUT = 15.0
+
+
+async def kraken_get(path: str, params: dict = None) -> dict:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        url = KRAKEN_BASE + path
+        r = await client.get(url, params=params)
+        if r.status_code != 200:
+            raise HTTPException(status_code=r.status_code, detail=f"Kraken returned {r.status_code}: {r.text[:200]}")
+        return r.json()
+
+
+@app.get("/api/executions")
+async def get_executions(
+    symbol: str = Query(..., description="e.g. PF_XBTUSD"),
+    since: Optional[int] = Query(None, description="Unix timestamp ms"),
+    continuationToken: Optional[str] = Query(None),
+):
+    params = {"sort": "asc"}
+    if since:
+        params["since"] = since
+    if continuationToken:
+        params["continuationToken"] = continuationToken
+
+    data = await kraken_get(f"/api/history/v2/market/{symbol}/executions", params)
+
+    rows = []
+    for el in data.get("elements", []):
+        ts = el.get("timestamp")
+        ex = el.get("event", {}).get("Execution", {}).get("execution", {})
+        if not ex:
+            continue
+        maker = ex.get("makerOrder", {})
+        taker = ex.get("takerOrder", {})
+        rows.append({
+                "time": ts,
+                "uid": ex.get("uid", ""),
+                "tradeable": maker.get("tradeable") or taker.get("tradeable") or "",
+                "makerDirection": maker.get("direction", ""),
+                "takerDirection": taker.get("direction", ""),
+                "price": ex.get("price"),
+                "quantity": ex.get("quantity"),
+                "usdValue": ex.get("usdValue"),
+                "markPrice": ex.get("markPrice"),
+                "makerOrderType": maker.get("orderType", ""),
+                "takerOrderType": taker.get("orderType", ""),
+                "limitFilled": ex.get("limitFilled"),
+            })
+
+    return JSONResponse({
+        "rows": rows,
+        "continuationToken": data.get("continuationToken"),
+        "total": len(rows),
+    })
+
+
+@app.get("/api/ohlc")
+async def get_ohlc(
+    symbol: str = Query(...),
+    priceType: str = Query("mark", description="mark | spot | trade"),
+    interval: str = Query("1m", description="1m 5m 15m 1h 4h 1d 1w"),
+    fromTs: Optional[int] = Query(None, description="Unix timestamp seconds"),
+    toTs: Optional[int] = Query(None, description="Unix timestamp seconds"),
+):
+    params = {}
+    if fromTs:
+        params["from"] = fromTs
+    if toTs:
+        params["to"] = toTs
+
+    data = await kraken_get(f"/api/charts/v1/{priceType}/{symbol}/{interval}", params)
+
+    candles = []
+    for c in data.get("candles", []):
+        candles.append({
+            "time": c[0] if isinstance(c, list) else c.get("time"),
+            "open":  c[1] if isinstance(c, list) else c.get("open"),
+            "high":  c[2] if isinstance(c, list) else c.get("high"),
+            "low":   c[3] if isinstance(c, list) else c.get("low"),
+            "close": c[4] if isinstance(c, list) else c.get("close"),
+            "volume": c[5] if isinstance(c, list) and len(c) > 5 else c.get("volume", 0) if isinstance(c, dict) else 0,
+        })
+
+    return JSONResponse({"candles": candles, "total": len(candles)})
+
+
+@app.get("/api/markprice")
+async def get_markprice(
+    symbol: str = Query(...),
+    since: Optional[int] = Query(None, description="Unix timestamp ms"),
+    before: Optional[int] = Query(None, description="Unix timestamp ms"),
+):
+    params = {"sort": "asc"}
+    if since:
+        params["since"] = since
+    if before:
+        params["before"] = before
+
+    data = await kraken_get(f"/api/history/v2/market/{symbol}/price", params)
+
+    rows = []
+    for el in data.get("elements", []):
+        ts = el.get("timestamp")
+        ev = el.get("event", {})
+        price = (
+            ev.get("MarkPriceChanged", {}).get("price")
+            or ev.get("markPriceChanged", {}).get("price")
+            or ev.get("price")
+        )
+        if price is not None:
+            rows.append({"timestamp": ts, "price": price})
+
+    return JSONResponse({
+        "rows": rows,
+        "total": len(rows),
+        "continuationToken": data.get("continuationToken"),
+    })
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    with open("templates/index.html") as f:
+        return f.read()
