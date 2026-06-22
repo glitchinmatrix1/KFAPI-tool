@@ -43,6 +43,9 @@ h1{font-size:19px;font-weight:600;letter-spacing:-0.02em}
 .field label{font-size:11px;font-weight:500;color:var(--purple-light);text-transform:uppercase;letter-spacing:.08em}
 .field input,.field select{background:var(--navy);border:0.5px solid var(--navy-border);color:var(--text);font-family:'DM Mono',monospace;font-size:12.5px;padding:7px 11px;border-radius:7px;outline:none;transition:border-color .15s;width:100%}
 .field input:focus,.field select:focus{border-color:var(--purple-light)}
+.field input[type="datetime-local"]{cursor:pointer;color-scheme:dark}
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:invert(0.6) sepia(1) saturate(3) hue-rotate(200deg);cursor:pointer;opacity:0.7}
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover{opacity:1}
 .field select option{background:var(--navy-mid)}
 .field .hint{font-size:10.5px;color:var(--text-dim);margin-top:3px}
 .fetch-btn{padding:8px 20px;background:var(--purple);border:none;color:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;border-radius:7px;cursor:pointer;transition:background .15s;white-space:nowrap;align-self:flex-end;height:34px}
@@ -133,9 +136,9 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
     <div class="config">
       <div class="config-row">
         <div class="field" style="max-width:240px;flex:2">
-          <label>Since (YYYY-MM-DD HH:MM:SS)</label>
-          <input type="text" id="exec-since" placeholder="e.g. 2026-05-12 21:22:00">
-          <span class="hint">Leave blank for most recent</span>
+          <label>Since</label>
+          <input type="datetime-local" id="exec-since">
+          <span class="hint">Optional — leave blank for most recent</span>
         </div>
         <div class="field" style="max-width:180px;flex:1">
           <label>Contract Symbol</label>
@@ -190,12 +193,12 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
           </select>
         </div>
         <div class="field" style="max-width:220px">
-          <label>From (YYYY-MM-DD HH:MM:SS)</label>
-          <input type="text" id="ohlc-from" placeholder="optional">
+          <label>From</label>
+          <input type="datetime-local" id="ohlc-from">
         </div>
         <div class="field" style="max-width:220px">
-          <label>To (YYYY-MM-DD HH:MM:SS)</label>
-          <input type="text" id="ohlc-to" placeholder="optional">
+          <label>To</label>
+          <input type="datetime-local" id="ohlc-to">
         </div>
         <button class="fetch-btn" id="ohlc-btn" onclick="fetchOHLC()">Fetch</button>
       </div>
@@ -222,12 +225,12 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
           <input type="text" id="mp-symbol" placeholder="PF_XBTUSD" value="PF_XBTUSD">
         </div>
         <div class="field" style="max-width:240px">
-          <label>Since (YYYY-MM-DD HH:MM:SS)</label>
-          <input type="text" id="mp-since" placeholder="e.g. 2026-06-05 21:03:00">
+          <label>Since</label>
+          <input type="datetime-local" id="mp-since">
         </div>
         <div class="field" style="max-width:240px">
-          <label>Before (YYYY-MM-DD HH:MM:SS)</label>
-          <input type="text" id="mp-before" placeholder="optional">
+          <label>Before</label>
+          <input type="datetime-local" id="mp-before">
         </div>
         <button class="fetch-btn" id="mp-btn" onclick="fetchMarkPrice()">Fetch</button>
       </div>
@@ -264,7 +267,10 @@ function copy(id) {
 
 function tsToMs(s) {
   if (!s || !s.trim()) return null;
-  const d = new Date(s.trim().replace(' ','T') + 'Z');
+  const v = s.trim();
+  // datetime-local gives "2026-05-12T21:22" or "2026-05-12T21:22:00" — append Z for UTC
+  const iso = v.includes('T') ? v + (v.length === 16 ? ':00Z' : 'Z') : v.replace(' ','T') + 'Z';
+  const d = new Date(iso);
   return isNaN(d) ? null : d.getTime();
 }
 
