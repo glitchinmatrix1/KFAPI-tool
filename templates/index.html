@@ -696,7 +696,6 @@ function renderOHLCChart(candles) {
     const tip = document.getElementById('ohlc-tip');
     if (tip) tip.style.display = 'none';
   };
-  canvas.onmousemove = ohlcTooltip;
 }
 
 function ohlcTooltip(e) {
@@ -728,8 +727,9 @@ function ohlcTooltip(e) {
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'ohlc-tip';
-    tip.style.cssText = 'position:fixed;pointer-events:none;background:#0d1128;border:1px solid #2a3060;border-radius:8px;padding:10px 14px;font-size:11px;font-family:DM Mono,monospace;color:#c8d0f0;z-index:9999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
-    document.body.appendChild(tip);
+    tip.style.cssText = 'position:absolute;pointer-events:none;background:#0d1128;border:1px solid #2a3060;border-radius:8px;padding:10px 14px;font-size:11px;font-family:DM Mono,monospace;color:#c8d0f0;z-index:10;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.5);display:none;';
+    canvas.parentElement.style.position = 'relative';
+    canvas.parentElement.appendChild(tip);
   }
   tip.innerHTML =
     \`<div style="color:#7b5ef0;margin-bottom:6px;font-size:10px">\${time} UTC</div>
@@ -741,12 +741,14 @@ function ohlcTooltip(e) {
     </div>
     <div style="color:\${color};font-size:10px;border-top:1px solid #1e2545;padding-top:5px">\${chg>=0?'+':''}\${chg.toFixed(4)} (\${pct.toFixed(3)}%)</div>\`;
 
-  // Smart positioning — flip left/up if near edges
-  const TIP_W = 200, TIP_H = 110;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let tx = e.clientX + 16, ty = e.clientY - 10;
-  if (tx + TIP_W > vw - 8) tx = e.clientX - TIP_W - 12;
-  if (ty + TIP_H > vh - 8) ty = e.clientY - TIP_H - 10;
+  // Position relative to chart card, flip left if near right edge
+  const TIP_W = 200;
+  const rect2 = canvas.getBoundingClientRect();
+  const parentRect = canvas.parentElement.getBoundingClientRect();
+  let tx = (e.clientX - parentRect.left) + 16;
+  let ty = (e.clientY - parentRect.top) - 10;
+  if (tx + TIP_W > canvas.parentElement.clientWidth - 8) tx = (e.clientX - parentRect.left) - TIP_W - 12;
+  if (ty < 0) ty = 4;
   tip.style.left = tx + 'px';
   tip.style.top  = ty + 'px';
   tip.style.display = 'block';
