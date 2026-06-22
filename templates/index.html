@@ -268,8 +268,11 @@ function copy(id) {
 function tsToMs(s) {
   if (!s || !s.trim()) return null;
   const v = s.trim();
-  // datetime-local: "2026-05-12T21:22", "T21:22:00", or "T21:22:00.123" — always treat as UTC
   let iso = v.includes('T') ? v : v.replace(' ', 'T');
+  // Normalise to full precision with ms defaulting to .000
+  if (iso.length === 16) iso += ':00.000';       // "T21:22"       → add :ss.mmm
+  else if (iso.length === 19) iso += '.000';      // "T21:22:00"    → add .mmm
+  // else already has ms e.g. "T21:22:00.123"
   if (!iso.endsWith('Z') && !iso.match(/[+-]\d{2}:\d{2}$/)) iso += 'Z';
   const d = new Date(iso);
   return isNaN(d) ? null : d.getTime();
