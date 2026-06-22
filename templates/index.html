@@ -107,6 +107,21 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
 .page-btn:disabled{opacity:.4;cursor:default}
 .page-info{font-size:11.5px;color:var(--text-dim)}
 
+
+/* OHLC summary cards */
+.ohlc-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:1.25rem}
+.ohlc-ccard{background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:10px;padding:14px 16px}
+.ohlc-ccard-time{font-size:10px;color:var(--purple-light);font-family:'DM Mono',monospace;margin-bottom:10px;letter-spacing:.04em}
+.ohlc-ccard-prices{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-bottom:12px}
+.ohlc-ccard-price-item{display:flex;flex-direction:column;gap:2px}
+.ohlc-ccard-price-label{font-size:9px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase}
+.ohlc-ccard-price-val{font-size:13px;font-family:'DM Mono',monospace;font-weight:500}
+.ohlc-range-bar{position:relative;height:8px;background:var(--navy);border-radius:4px;margin-top:4px}
+.ohlc-range-fill{position:absolute;height:100%;border-radius:4px;background:linear-gradient(90deg,rgba(232,67,45,0.4),rgba(45,202,114,0.4))}
+.ohlc-range-open{position:absolute;top:-2px;width:2px;height:12px;background:#e8912d;border-radius:1px}
+.ohlc-range-close{position:absolute;top:-2px;width:2px;height:12px;border-radius:1px}
+.ohlc-range-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:3px;font-family:'DM Mono',monospace}
+.ohlc-ccard-chg{font-size:11px;font-family:'DM Mono',monospace;margin-top:8px;text-align:right}
 /* Chart */
 .chart-card{background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.25rem}
 .chart-card canvas{width:100%!important}
@@ -225,6 +240,7 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
     <div class="error-box" id="ohlc-error"></div>
 
     <div id="ohlc-stats" class="stats-row" style="display:none"></div>
+    <div id="ohlc-cards" style="display:none"></div>
     <div class="chart-card" id="ohlc-chart-card" style="display:none"><canvas id="ohlc-canvas" height="260"></canvas></div>
     <div id="ohlc-results"></div>
   </div>
@@ -472,6 +488,7 @@ async function fetchOHLC() {
   document.getElementById('ohlc-btn').disabled = true;
   setStatus('ohlc','loading','Fetching…');
   hideErr('ohlc');
+  document.getElementById('ohlc-cards').style.display='none';
 
   try {
     const r = await fetch('/api/ohlc?' + params.toString());
@@ -483,7 +500,8 @@ async function fetchOHLC() {
 
     setStatus('ohlc','ok', candles.length.toLocaleString() + ' candles');
     renderOHLCStats(candles);
-    renderOHLCChart(candles);
+    if (candles.length < 5) { renderOHLCCards(candles); document.getElementById('ohlc-chart-card').style.display='none'; }
+    else { document.getElementById('ohlc-cards').style.display='none'; renderOHLCChart(candles); }
     renderOHLCTable(candles);
   } catch(e) {
     showErr('ohlc','Error: ' + e.message);
@@ -506,6 +524,52 @@ function renderOHLCStats(candles) {
     <div class="stat-card"><div class="stat-label">Last Close</div><div class="stat-value" style="color:var(--amber)">${last.toFixed(4)}</div></div>
     <div class="stat-card"><div class="stat-label">Total Volume</div><div class="stat-value" style="color:var(--blue)">${vol.toLocaleString('en',{maximumFractionDigits:0})}</div></div>
   `;
+}
+
+
+function renderOHLCCards(candles) {
+  const el = document.getElementById('ohlc-cards');
+  el.style.display = 'block';
+  el.innerHTML = '<div class="ohlc-card-grid">' + candles.map(cd => {
+    const o = parseFloat(cd.open), h = parseFloat(cd.high), l = parseFloat(cd.low), cl = parseFloat(cd.close);
+    const range = h - l || 0.0001;
+    const openPct  = ((o - l) / range * 100).toFixed(1);
+    const closePct = ((cl - l) / range * 100).toFixed(1);
+    const chg = cl - o, pct = (chg / o * 100);
+    const bull = cl >= o;
+    const closeColor = bull ? 'var(--green)' : 'var(--red)';
+    const time = new Date(cd.time).toISOString().replace('T',' ').substring(0,19) + ' UTC';
+    const fillLeft  = Math.min(parseFloat(openPct), parseFloat(closePct));
+    const fillWidth = Math.abs(parseFloat(closePct) - parseFloat(openPct));
+    return `<div class="ohlc-ccard">
+      <div class="ohlc-ccard-time">${time}</div>
+      <div class="ohlc-ccard-prices">
+        <div class="ohlc-ccard-price-item">
+          <span class="ohlc-ccard-price-label">Open</span>
+          <span class="ohlc-ccard-price-val" style="color:var(--amber)">${o.toFixed(6)}</span>
+        </div>
+        <div class="ohlc-ccard-price-item">
+          <span class="ohlc-ccard-price-label">High</span>
+          <span class="ohlc-ccard-price-val" style="color:var(--green)">${h.toFixed(6)}</span>
+        </div>
+        <div class="ohlc-ccard-price-item">
+          <span class="ohlc-ccard-price-label">Low</span>
+          <span class="ohlc-ccard-price-val" style="color:var(--red)">${l.toFixed(6)}</span>
+        </div>
+        <div class="ohlc-ccard-price-item">
+          <span class="ohlc-ccard-price-label">Close</span>
+          <span class="ohlc-ccard-price-val" style="color:${closeColor}">${cl.toFixed(6)}</span>
+        </div>
+      </div>
+      <div class="ohlc-range-bar">
+        <div class="ohlc-range-fill" style="left:${fillLeft}%;width:${fillWidth}%"></div>
+        <div class="ohlc-range-open"  style="left:calc(${openPct}% - 1px)"></div>
+        <div class="ohlc-range-close" style="left:calc(${closePct}% - 1px);background:${closeColor}"></div>
+      </div>
+      <div class="ohlc-range-labels"><span>${l.toFixed(2)}</span><span>← Low · High →</span><span>${h.toFixed(2)}</span></div>
+      <div class="ohlc-ccard-chg" style="color:${closeColor}">${chg>=0?'+':''}${chg.toFixed(4)} (${pct>=0?'+':''}${pct.toFixed(3)}%)</div>
+    </div>`;
+  }).join('') + '</div>';
 }
 
 function renderOHLCChart(candles) {
