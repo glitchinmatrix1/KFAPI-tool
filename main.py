@@ -44,16 +44,12 @@ async def get_executions(
     rows = []
     for el in data.get("elements", []):
         ts = el.get("timestamp")
-        ev = el.get("event", {})
-        exec_ev = ev.get("execution", {})
-        executions = exec_ev.get("executions", [])
-        if not executions and "execution" in exec_ev:
-            executions = [exec_ev["execution"]]
-
-        for ex in executions:
-            maker = ex.get("makerOrder", {})
-            taker = ex.get("takerOrder", {})
-            rows.append({
+        ex = el.get("event", {}).get("Execution", {}).get("execution", {})
+        if not ex:
+            continue
+        maker = ex.get("makerOrder", {})
+        taker = ex.get("takerOrder", {})
+        rows.append({
                 "time": ts,
                 "uid": ex.get("uid", ""),
                 "tradeable": maker.get("tradeable") or taker.get("tradeable") or "",
