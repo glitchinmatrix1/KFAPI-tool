@@ -122,6 +122,7 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
 .ohlc-range-close{position:absolute;top:-2px;width:2px;height:12px;border-radius:1px}
 .ohlc-range-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:3px;font-family:'DM Mono',monospace}
 .ohlc-ccard-chg{font-size:11px;font-family:'DM Mono',monospace;margin-top:8px;text-align:right}
+.panel-blurb{font-size:12px;color:var(--text-dim);line-height:1.6;margin:0 0 1rem 0;padding:10px 14px;background:var(--navy-mid);border-left:3px solid var(--purple);border-radius:0 6px 6px 0;max-width:860px}
 /* Chart */
 .chart-card{background:var(--navy-mid);border:0.5px solid var(--navy-border);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.25rem}
 .chart-card canvas{width:100%!important}
@@ -161,6 +162,7 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
 
   <!-- ═══════════ EXECUTIONS ═══════════ -->
   <div class="panel active" id="panel-executions">
+    <p class="panel-blurb">Returns up to 1,000 trade executions from a given timestamp, sorted ascending. Each row shows the maker/taker direction, price, quantity, USD value, and mark price at time of execution. Use the continuation token to page through results beyond the first 1,000.</p>
     <div class="config">
       <div class="config-row">
         <div class="field" style="max-width:240px;flex:2">
@@ -185,6 +187,34 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
     <div class="error-box" id="exec-error"></div>
 
     <div id="exec-stats" class="stats-row" style="display:none"></div>
+    <div id="exec-filter" style="display:none;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--purple-light);letter-spacing:.06em;text-transform:uppercase">Filter</span>
+        <select id="exec-filter-maker" onchange="applyExecFilter()" style="font-size:12px;padding:5px 10px;background:var(--navy);border:0.5px solid var(--navy-border);color:var(--text);border-radius:6px;font-family:'DM Mono',monospace">
+          <option value="">Maker Type: All</option>
+          <option value="Post">Post</option>
+          <option value="Limit">Limit</option>
+          <option value="IoC">IoC</option>
+          <option value="Assignment">Assignment</option>
+          <option value="Liquidation">Liquidation</option>
+        </select>
+        <select id="exec-filter-taker" onchange="applyExecFilter()" style="font-size:12px;padding:5px 10px;background:var(--navy);border:0.5px solid var(--navy-border);color:var(--text);border-radius:6px;font-family:'DM Mono',monospace">
+          <option value="">Taker Type: All</option>
+          <option value="Post">Post</option>
+          <option value="Limit">Limit</option>
+          <option value="IoC">IoC</option>
+          <option value="Assignment">Assignment</option>
+          <option value="Liquidation">Liquidation</option>
+        </select>
+        <select id="exec-filter-dir" onchange="applyExecFilter()" style="font-size:12px;padding:5px 10px;background:var(--navy);border:0.5px solid var(--navy-border);color:var(--text);border-radius:6px;font-family:'DM Mono',monospace">
+          <option value="">Direction: All</option>
+          <option value="Buy">Maker Buy</option>
+          <option value="Sell">Maker Sell</option>
+        </select>
+        <button onclick="clearExecFilter()" style="font-size:11px;padding:5px 10px;background:transparent;border:0.5px solid var(--navy-border);color:var(--text-dim);border-radius:6px;cursor:pointer">Clear</button>
+        <span id="exec-filter-count" style="font-size:11px;color:var(--text-dim)"></span>
+      </div>
+    </div>
     <div id="exec-results"></div>
     <div class="cont-row" id="exec-cont" style="display:none">
       <button class="cont-btn" onclick="fetchExecutionsCont()">Load next page →</button>
@@ -194,6 +224,7 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
 
   <!-- ═══════════ OHLC ═══════════ -->
   <div class="panel" id="panel-ohlc">
+    <p class="panel-blurb">Returns OHLC candlestick data for a contract over a chosen interval and price type (Mark, Spot, or Trade). Use Mark for funding/liquidation reference prices, Trade for actual executed prices. Narrow time ranges show individual candle cards; wider ranges render as a Heikin-Ashi chart.</p>
     <div class="config">
       <div class="config-row">
         <div class="field" style="max-width:180px">
@@ -247,6 +278,7 @@ td.uid{color:var(--text-dim);font-size:10px;max-width:120px;overflow:hidden;text
 
   <!-- ═══════════ MARK PRICE ═══════════ -->
   <div class="panel" id="panel-markprice">
+    <p class="panel-blurb">Returns every mark price change event for a contract between two timestamps. Mark price updates every second and is used to calculate unrealised P&amp;L, trigger liquidations, and determine funding. Useful for pinpointing the exact mark price at the time of a client's liquidation or margin call.</p>
     <div class="config">
       <div class="config-row">
         <div class="field" style="max-width:180px">
@@ -361,7 +393,7 @@ async function fetchExecutions(cont) {
   }
   if (cont) params.set('continuationToken', cont);
 
-  if (!cont) { execAllRows = []; execPage = 0; execContToken = null; }
+  if (!cont) { execAllRows = []; execPage = 0; execContToken = null; execFilteredRows = null; }
 
   const apiUrl = '/api/executions?' + params.toString();
   const krakUrl = `https://futures.kraken.com/api/history/v2/market/${sym}/executions?sort=asc${since ? '&since=' + tsToMs(since) : ''}${cont ? '&continuationToken=' + encodeURIComponent(cont) : ''}`;
@@ -382,7 +414,9 @@ async function fetchExecutions(cont) {
       showErr('exec','No executions returned for this symbol / time range.');
       setStatus('exec','err','No data');
     } else {
+      execFilteredRows = null;
       renderExecStats();
+      document.getElementById('exec-filter').style.display = 'block';
       renderExecTable();
       const contRow = document.getElementById('exec-cont');
       if (execContToken) {
@@ -422,10 +456,11 @@ function renderExecStats() {
 
 function renderExecTable() {
   const wrap = document.getElementById('exec-results');
-  const total = execAllRows.length;
+  const source = execFilteredRows !== null ? execFilteredRows : execAllRows;
+  const total = source.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const start = execPage * PAGE_SIZE;
-  const rows = execAllRows.slice(start, start + PAGE_SIZE);
+  const rows = source.slice(start, start + PAGE_SIZE);
 
   if (!rows.length) { wrap.innerHTML = '<div class="empty">No rows to display.</div>'; return; }
 
@@ -455,10 +490,41 @@ function renderExecTable() {
   html += `</tbody></table></div>`;
   html += `<div class="pagination">
     <button class="page-btn" onclick="execNav(-1)" ${execPage===0?'disabled':''}>← Prev</button>
-    <span class="page-info">Page ${execPage+1} of ${totalPages} &nbsp;(${total.toLocaleString()} rows total)</span>
+    <span class="page-info">Page ${execPage+1} of ${totalPages} &nbsp;(${total.toLocaleString()}${execFilteredRows !== null ? ' filtered / ' + execAllRows.length.toLocaleString() + ' total' : ' rows total'})</span>
     <button class="page-btn" onclick="execNav(1)" ${execPage>=totalPages-1?'disabled':''}>Next →</button>
   </div>`;
   wrap.innerHTML = html;
+}
+
+function applyExecFilter() {
+  const maker = document.getElementById('exec-filter-maker').value;
+  const taker = document.getElementById('exec-filter-taker').value;
+  const dir   = document.getElementById('exec-filter-dir').value;
+  if (!maker && !taker && !dir) {
+    execFilteredRows = null;
+    document.getElementById('exec-filter-count').textContent = '';
+  } else {
+    execFilteredRows = execAllRows.filter(r => {
+      if (maker && r.makerOrderType !== maker) return false;
+      if (taker && r.takerOrderType !== taker) return false;
+      if (dir   && r.makerDirection  !== dir)  return false;
+      return true;
+    });
+    document.getElementById('exec-filter-count').textContent =
+      execFilteredRows.length.toLocaleString() + ' matching';
+  }
+  execPage = 0;
+  renderExecTable();
+}
+
+function clearExecFilter() {
+  document.getElementById('exec-filter-maker').value = '';
+  document.getElementById('exec-filter-taker').value = '';
+  document.getElementById('exec-filter-dir').value = '';
+  execFilteredRows = null;
+  execPage = 0;
+  document.getElementById('exec-filter-count').textContent = '';
+  renderExecTable();
 }
 
 function execNav(d) {
